@@ -13,6 +13,8 @@
 class BaseView {
 public:
     virtual std::vector<std::pair<std::string, std::string>> call() = 0;
+    virtual std::vector<std::pair<std::string, std::string>> call(std::vector<std::any> args) = 0;
+
     std::vector<std::any> args = {};
     virtual void setArguments(std::vector<std::any> args) = 0;
 };
@@ -20,21 +22,35 @@ public:
 template<typename R, typename... Args>
 class View : public BaseView{
 public:
+    friend class LambdaMap;
+
     View() {};
-    View(auto func) {
+    View(const auto& func) {
         this->func = std::function<R(Args...)>(func);
+        // this->funcPtr = std::make_shared<std::function<R(Args...)>>(func);
+        // this->funcPtr = std::make_shared<View>(func);
     }
-    void setArguments(std::vector<std::any> args) override {
-        arguments = unpackArguments(args, std::index_sequence_for<Args...>{});
-    }
+
     std::vector<std::pair<std::string, std::string>> call () override {
-        // func(1, 2);
         std::apply(func, arguments);
         return std::vector<std::pair<std::string, std::string>>();
     }
 
+    std::vector<std::pair<std::string, std::string>> call(std::vector<std::any> args) {
+        setArguments(args);
+        std::apply(func, arguments);
+        // TODO: Clear arguments to avoid reuse in future calls, i.e. view->call();
+        return std::vector<std::pair<std::string, std::string>>();
+    }
+
+    void operator=(auto func) { this->func = std::function<R(Args...)>(func); }
+
 private:
     std::function<R(Args...)> func;
+    std::shared_ptr<View> viewPtr;
+    // std::shared_ptr<std::function<R(Args...)>> funcPtr;
+    // std::shared_ptr<View> funcPtr;
+
     std::tuple<Args...> arguments;
 
     template <size_t... Is>
@@ -42,48 +58,61 @@ private:
         return std::make_tuple(std::any_cast<Args>(args[Is])...);
     }
 
+    void setArguments(std::vector<std::any> args) override {
+        arguments = unpackArguments(args, std::index_sequence_for<Args...>{});
+    }
+
+    void setViewPtr () {
+        viewPtr = std::make_shared<View>(func);
+    }
 };
 
 // std::vector<std::shared_ptr<BaseView>> lambdas = {};
-std::map<std::string, std::shared_ptr<BaseView>> lambdas = {}; //Might change this to std::unordered_map
 
-// Interface needs to be abstracted for easy integration
+class LambdaMap {
+public:
+    LambdaMap() {};
+
+    void emplace(std::string name, auto& view) {
+        view.setViewPtr();
+        lambdas.emplace(name, view.viewPtr);
+    };
+
+    std::shared_ptr<BaseView> operator[] (std::string key) {
+        if (lambdas.find(key) != lambdas.end()){
+            return lambdas[key];
+        } else {
+            std::cerr << "ERROR: View not found";
+        }
+        return nullptr;
+    }
+private:
+    std::map<std::string, std::shared_ptr<BaseView>> lambdas = {}; //Might change this to std::unordered_map
+};
+
+
 int main() {
+
+    // Return type of lambda functions is still restricted
+    // TODO: Make the return type configurable
     using RET = std::vector<std::pair<std::string, std::string>>;
 
-    //   Lambda Syntax:
-    //   std::make_shared<View<RET, argument_types...>>(
-    //       [capture_list](argument_declarations) {
-    //           // function body
-    //           return RET({ { "key", "value" }, ... });
-    //       }
-    //   );
-
-    //   Examples:
-    std::shared_ptr<View<RET, int, int>> sum;
-    sum = std::make_shared<View<RET, int, int>>([] (int i, int j) {
+    View<RET, int, int> sum = [] (int i, int j) {
         std::cout << "Sum: " << i + j << std::endl;
         int result = i + j;
-
         return RET({{"Result", std::to_string(result)}});
-    });
+    };
 
-    std::shared_ptr<View<RET, int, int, int>> mult;
-    mult = std::make_shared<View<RET, int, int, int>>([] (int i, int j, int k) {
-        std::cout << "Multiplication: " << i * j  * k << std::endl;
-        int result = i * j  * k;
-
+    View<RET, int, int, int> mult = [] (int i, int j, int k) {
+        std::cout << "Multiplication: " << i * j * k << std::endl;
+        int result = i * j * k;
         return RET({{"Result", std::to_string(result)}});
-    });
-    
-    // Register functions
-    lambdas.emplace("sum", sum);
-    lambdas.emplace("mult", mult);
+    };
 
-    // Call functions
-    lambdas["sum"]->setArguments({std::any(3), std::any(4)});
-    lambdas["sum"]->call();
+    LambdaMap lm;
+    lm.emplace("sum", sum);
+    lm.emplace("mult", mult);
 
-    lambdas["mult"]->setArguments({std::any(3), std::any(4), std::any(5)});
-    lambdas["mult"]->call();
+    lm["sum"]->call({3, 5});
+    lm["mult"]->call({3, 4, 5});
 }
