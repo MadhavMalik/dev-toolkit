@@ -1,3 +1,4 @@
+// This is an experimental file, server implementation is in Server.cpp 
 #include <iostream>
 
 #include "crow.h"
@@ -29,7 +30,7 @@ void Server::start() {
     crow::mustache::set_global_base("/Users/madhavmalik/VSCProjects/dev-toolkit/templates"); //turn this into a relative path
 
     // make this flexible to take in query params
-    CROW_ROUTE(app, "/<string>/int")([this](std::string parameter, int i){
+    CROW_ROUTE(app, "/<string>/<int>")([this](std::string parameter, int i){
         auto page = crow::mustache::load("index.html");
         auto param = view(parameter);
         return page.render({{"parameter",  param}, {"i", i}});

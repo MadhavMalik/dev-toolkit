@@ -1,7 +1,8 @@
 // A type-safe dynamic function registry for C++ (map/vector of lambda functions)
 // Provides a unified interface for registering and triggering strongly-typed functions at runtime.
 
-// TODO: Integrate with Crow routes and toolkit event system
+// TODO: Integrate with toolkit event system
+// Currently enforces all handlers to return nlohmann::json
 
 #include <iostream>
 #include <vector>
@@ -12,11 +13,8 @@
 
 class BaseView {
 public:
-    virtual std::vector<std::pair<std::string, std::string>> call() = 0;
-    virtual std::vector<std::pair<std::string, std::string>> call(std::vector<std::any> args) = 0;
-
-    std::vector<std::any> args = {};
-    virtual void setArguments(std::vector<std::any> args) = 0;
+    virtual json call() = 0;
+    virtual json call(std::vector<std::any> args) = 0;
 };
 
 template<typename R, typename... Args>
@@ -27,20 +25,16 @@ public:
     View() {};
     View(const auto& func) {
         this->func = std::function<R(Args...)>(func);
-        // this->funcPtr = std::make_shared<std::function<R(Args...)>>(func);
-        // this->funcPtr = std::make_shared<View>(func);
     }
 
-    std::vector<std::pair<std::string, std::string>> call () override {
-        std::apply(func, arguments);
-        return std::vector<std::pair<std::string, std::string>>();
+    json call() override {
+        return std::apply(func, arguments);
     }
 
-    std::vector<std::pair<std::string, std::string>> call(std::vector<std::any> args) {
+    json call(std::vector<std::any> args) override {
         setArguments(args);
-        std::apply(func, arguments);
         // TODO: Clear arguments to avoid reuse in future calls, i.e. view->call();
-        return std::vector<std::pair<std::string, std::string>>();
+        return std::apply(func, arguments);
     }
 
     void operator=(auto func) { this->func = std::function<R(Args...)>(func); }
@@ -48,9 +42,6 @@ public:
 private:
     std::function<R(Args...)> func;
     std::shared_ptr<View> viewPtr;
-    // std::shared_ptr<std::function<R(Args...)>> funcPtr;
-    // std::shared_ptr<View> funcPtr;
-
     std::tuple<Args...> arguments;
 
     template <size_t... Is>
@@ -58,7 +49,7 @@ private:
         return std::make_tuple(std::any_cast<Args>(args[Is])...);
     }
 
-    void setArguments(std::vector<std::any> args) override {
+    void setArguments(std::vector<std::any> args) {
         arguments = unpackArguments(args, std::index_sequence_for<Args...>{});
     }
 
@@ -66,8 +57,6 @@ private:
         viewPtr = std::make_shared<View>(func);
     }
 };
-
-// std::vector<std::shared_ptr<BaseView>> lambdas = {};
 
 class LambdaMap {
 public:
@@ -82,7 +71,7 @@ public:
         if (lambdas.find(key) != lambdas.end()){
             return lambdas[key];
         } else {
-            std::cerr << "ERROR: View not found";
+            std::cerr << "(core) ERROR: View not found";
         }
         return nullptr;
     }
@@ -91,28 +80,24 @@ private:
 };
 
 
-int main() {
+// int main() {
 
-    // Return type of lambda functions is still restricted
-    // TODO: Make the return type configurable
-    using RET = std::vector<std::pair<std::string, std::string>>;
+//     View<json, int, int> sum = [] (int i, int j) {
+//         std::cout << "Sum: " << i + j << std::endl;
+//         int result = i + j;
+//         return json({{"Result", result}});
+//     };
 
-    View<RET, int, int> sum = [] (int i, int j) {
-        std::cout << "Sum: " << i + j << std::endl;
-        int result = i + j;
-        return RET({{"Result", std::to_string(result)}});
-    };
+//     View<json, int, int, int> mult = [] (int i, int j, int k) {
+//         std::cout << "Multiplication: " << i * j * k << std::endl;
+//         int result = i * j * k;
+//         return json({{"Result", result}});
+//     };
 
-    View<RET, int, int, int> mult = [] (int i, int j, int k) {
-        std::cout << "Multiplication: " << i * j * k << std::endl;
-        int result = i * j * k;
-        return RET({{"Result", std::to_string(result)}});
-    };
+//     LambdaMap lm;
+//     lm.emplace("sum", sum);
+//     lm.emplace("mult", mult);
 
-    LambdaMap lm;
-    lm.emplace("sum", sum);
-    lm.emplace("mult", mult);
-
-    lm["sum"]->call({3, 5});
-    lm["mult"]->call({3, 4, 5});
-}
+//     json result = lm["sum"]->call({3, 5});
+//     lm["mult"]->call({3, 4, 5});
+// }
