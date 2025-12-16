@@ -6,51 +6,58 @@
 #include <map>
 #include <memory>
 #include <functional>
+#include <nlohmann/json.hpp>
+#include <thread>
+#include "lambda_registry.hpp"
 
-class baseListener {
-public:
-    virtual std::vector<std::pair<std::string, std::string>> call() = 0;
-};
+using json = nlohmann::json;
 
-// Very restricted right now, doesn't allow arguments for listeners
-class Listener : public baseListener {
-public:
-    Listener();
-    Listener(auto listener) {
-        this->listener = std::function<void()>(listener);
-    }
-    std::vector<std::pair<std::string, std::string>> call() override {
-        listener();
-        return std::vector<std::pair<std::string, std::string>>();
-    }
-private:
-    std::function<void()> listener;
-};
-
+// template <typename... Args>
 class Event {
 public:
     Event() {};
     std::string name;
-    std::map<std::string, std::shared_ptr<baseListener>> listeners;
+    LambdaMap listeners;
 
     // trigger blocking
-    void trigger() {
+    template <typename... Args>
+    void trigger(Args&&... args) {
         for (auto listener : this->listeners) {
-            listener.second->call();
+            listener.second->call(args...);
         }
     }
 
-    void addListener(std::string name, std::shared_ptr<baseListener> listener) {
+    // This is still a blocking implementation
+    // TODO: use thread pool instead
+    template <typename... Args>
+    void triggerNonBlocking(Args&&... args) {
+        std::vector<std::thread> threads; // Use std::jthread instead
+
+        for (auto listener : this->listeners) {
+            threads.emplace_back([l = listener.second, args...] {
+                l->call(args...);
+            });
+        }
+
+        for (auto& t : threads) {
+            if (t.joinable()) t.join();
+        }
+    }
+
+    void addListener(std::string name, auto& listener) {
         listeners.emplace(name, listener);
     }
 };
 
 int main() {
     Event readData;
-    auto onReadData = [] () {
-        std::cout << "Running onReadData" << std::endl;
+    View<json, int> onReadData = [] (int sensorValue) {
+        std::cout << "Running onReadData with sensorValue: " << sensorValue << std::endl;
+        return json({{"Result", sensorValue/2}});
     };
-    readData.addListener("onReadData", std::make_shared<Listener>(onReadData));
-    readData.trigger(); // change this to globalEvents 
+    readData.addListener("onReadData", onReadData);
+    readData.trigger(42); // change this to globalEvents 
+    // readData.triggerNonBlocking(42); 
+
     return 0;
 }

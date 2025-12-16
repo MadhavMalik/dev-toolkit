@@ -5,6 +5,8 @@
 
 // Currently enforces all handlers to return nlohmann::json
 
+#pragma once
+
 #include <iostream>
 #include <vector>
 #include <map>
@@ -83,6 +85,9 @@ public:
         lambdas.emplace(name, view.viewPtr);
     };
 
+    auto begin() { return lambdas.begin(); }
+    auto end() { return lambdas.end(); }
+
     std::shared_ptr<BaseView> operator[] (std::string key) {
         auto it = lambdas.find(key);
         if (it != lambdas.end()){
@@ -96,26 +101,14 @@ private:
     std::map<std::string, std::shared_ptr<BaseView>> lambdas = {}; //Might change this to std::unordered_map
 };
 
-
 // Usage:
-// int main() {
-
+//
 //     View<json, int, int> sum = [] (int i, int j) {
 //         std::cout << "Sum: " << i + j << std::endl;
-//         int result = i + j;
-//         return json({{"Result", result}});
+//         return json({{"Result", i + j}});
 //     };
-
-//     View<json, int, int, int> mult = [] (int i, int j, int k) {
-//         std::cout << "Multiplication: " << i * j * k << std::endl;
-//         int result = i * j * k;
-//         return json({{"Result", result}});
-//     };
-
+//
 //     LambdaMap lm;
 //     lm.emplace("sum", sum);
-//     lm.emplace("mult", mult);
-
+//
 //     json result = lm["sum"]->call(3, 5);
-//     lm["mult"]->call(3, 4, 5);
-// }
