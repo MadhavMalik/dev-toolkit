@@ -39,6 +39,7 @@ public:
             });
         }
 
+        // blocking
         for (auto& t : threads) {
             if (t.joinable()) t.join();
         }
@@ -49,15 +50,15 @@ public:
     }
 };
 
-int main() {
-    Event readData;
-    View<json, int> onReadData = [] (int sensorValue) {
-        std::cout << "Running onReadData with sensorValue: " << sensorValue << std::endl;
-        return json({{"Result", sensorValue/2}});
-    };
-    readData.addListener("onReadData", onReadData);
-    readData.trigger(42); // change this to globalEvents 
-    // readData.triggerNonBlocking(42); 
+// int main() {
+//     Event readData;
+//     View<json, int> onReadData = [] (int sensorValue) {
+//         std::cout << "Running onReadData with sensorValue: " << sensorValue << std::endl;
+//         return json({{"Result", sensorValue/2}});
+//     };
+//     readData.addListener("onReadData", onReadData);
+//     readData.trigger(42); // change this to globalEvents 
+//     // readData.triggerNonBlocking(42); 
 
-    return 0;
-}
+//     return 0;
+// }
